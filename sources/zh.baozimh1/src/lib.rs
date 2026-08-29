@@ -16,7 +16,7 @@ use html::{ChapterPage as _, MangaPage as _, PageList as _};
 use json::ApiResponse;
 use net::Url;
 
-pub const BASE_URL: &str = "https://www.baozimh.com";
+pub const BASE_URL: &str = "https://www.twmanga.com";
 
 struct Baozimanhua;
 
@@ -80,46 +80,7 @@ impl Source for Baozimanhua {
 }
 
 const LATEST_CHAPTER_MARK: &str = "baozimh_latest";
-const APP_USER_AGENT: &str = "baozimh_android/1.0.31/gb/adset";
-const APP_VERSION: &str = "1.0.31";
-const APP_ID: &str = "cn.sts.xiaoyun.ordermeals";
-const DEVICE_ID: &str = "BE2A.250530.026.F3";
-const DEVICE_CODE: &str = "2c712c6ba4e95a9f4157f94e1794a86c";
-const BYPASS_HOSTS: &[&str] = &[
-	"appgb-vdkr.baozimh.com",
-	"appgb1-vdkr.baozimh.com",
-	"appgb2-vdkr.baozimh.com",
-	"app1-vdkr.baozimh.com",
-	"app2-vdkr.baozimh.com",
-];
-
 fn latest_chapter_document(manga_id: &str, chapter_key: &str) -> Result<Document> {
-	let path = format!(
-		"/baozimhapp/comic/chapter/{}/{}.html",
-		manga_id,
-		net::chapter_path(chapter_key)
-	);
-
-	for host in BYPASS_HOSTS {
-		let url = format!("https://{}{}", host, path);
-		let request = Request::get(url)?
-			.header("Origin", BASE_URL)
-			.header("Referer", "https://app.baozimh.com/")
-			.header("app-id", APP_ID)
-			.header("app-version", APP_VERSION)
-			.header("device-code", DEVICE_CODE)
-			.header("device-id", DEVICE_ID)
-			.header("User-Agent", APP_USER_AGENT);
-		if let Ok(document) = request.html()
-			&& document
-				.select("div.chapter-img img.comic-contain__item[data-src], img.comic-contain__item[data-src]")
-				.map(|mut items| items.next().is_some())
-				.unwrap_or(false)
-		{
-			return Ok(document);
-		}
-	}
-
 	Ok(Url::chapter(manga_id.to_string(), chapter_key.to_string())
 		.request()?
 		.html()?)

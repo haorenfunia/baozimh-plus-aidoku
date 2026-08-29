@@ -8,7 +8,7 @@ use aidoku::{
 };
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
-pub const APP_BASE_URL: &str = "https://appcn.baozimh.com";
+pub const APP_BASE_URL: &str = "https://www.twmanga.com";
 
 /// Normalize old/alternate Baozi domains and safely join relative links.
 pub fn absolute_url(raw: &str) -> String {
@@ -22,8 +22,11 @@ pub fn absolute_url(raw: &str) -> String {
 	} else {
 		format!("{}/{}", BASE_URL, value)
 	};
-	for host in ["www.baozimanhua.com", "baozimanhua.com", "cn.baozimanhua.com"] {
-		url = url.replace(host, "www.baozimh.com");
+	for host in [
+		"www.baozimanhua.com", "baozimanhua.com", "cn.baozimanhua.com",
+		"www.baozimh.com", "baozimh.com", "cn.baozimh.com", "tw.baozimh.com",
+	] {
+		url = url.replace(host, "www.twmanga.com");
 	}
 	url
 }
