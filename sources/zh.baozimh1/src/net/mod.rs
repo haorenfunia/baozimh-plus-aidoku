@@ -4,6 +4,7 @@ use aidoku::{
 	alloc::{String, string::ToString as _},
 	helpers::uri::encode_uri,
 	imports::net::Request,
+	prelude::*,
 };
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
