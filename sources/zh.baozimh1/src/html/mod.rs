@@ -377,7 +377,7 @@ impl PageList for Document {
 			} else if !url.contains("/scomic/") && !url.contains("comic") {
 				continue;
 			}
-			if !urls.iter().any(|existing| existing == url) {
+			if !urls.iter().any(|existing| existing.as_str() == url) {
 				urls.push(url.to_string());
 			}
 		}
