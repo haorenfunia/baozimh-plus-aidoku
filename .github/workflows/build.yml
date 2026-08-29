@@ -1,0 +1,54 @@
+name: Build Aidoku sources
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lld
+          cargo install --git https://github.com/Aidoku/aidoku-rs aidoku-cli --locked
+
+      - name: Build source packages
+        shell: bash
+        run: |
+          for src in sources/*; do
+            (cd "$src" && aidoku package)
+          done
+
+      - name: Build source index
+        shell: bash
+        run: |
+          rm -rf public
+          mkdir -p public
+          aidoku build sources/*/package.aix --name "包子漫画 Plus Sources"
+
+      - name: Publish generated files
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public
+          git diff --cached --quiet && exit 0
+          git commit -m "build: update Aidoku source package"
+          git push
