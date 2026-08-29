@@ -277,9 +277,9 @@ impl ChapterPage for Document {
 				.or_else(|| item.select_first("[onclick]").and_then(|el| el.attr("onclick")))
 				.unwrap_or_default();
 			let (key, chapter_url) = if !url.is_empty() {
-				let key = chapter_key(url);
+				let key = chapter_key(&url);
 				(key, format!("{}{}", BASE_URL, url))
-			} else if let Some((_slug, section, chapter)) = app_chapter_parts(onclick) {
+			} else if let Some((_slug, section, chapter)) = app_chapter_parts(&onclick) {
 				let key = format!("{}_{}", section, chapter);
 				let chapter_url = Url::chapter(manga_id.to_string(), key.clone()).to_string();
 				(key, chapter_url)
