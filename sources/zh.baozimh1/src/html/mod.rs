@@ -239,7 +239,15 @@ fn chapter_key(href: &str) -> String {
 		.filter(|v| !v.is_empty());
 	match (section, chapter) {
 		(Some(section), Some(chapter)) => format!("{}_{}", section, chapter),
-		_ => href.split('=').next_back().unwrap_or("").to_string(),
+		_ => href
+			.split('?')
+			.next()
+			.unwrap_or(href)
+			.rsplit('/')
+			.next()
+			.unwrap_or("")
+			.trim_end_matches(".html")
+			.to_string(),
 	}
 }
 
@@ -278,7 +286,12 @@ impl ChapterPage for Document {
 				.unwrap_or_default();
 			let (key, chapter_url) = if !url.is_empty() {
 				let key = chapter_key(&url);
-				(key, format!("{}{}", BASE_URL, url))
+				let chapter_url = if key.is_empty() {
+					String::new()
+				} else {
+					Url::chapter(manga_id.to_string(), key.clone()).to_string()
+				};
+				(key, chapter_url)
 			} else if let Some((_slug, section, chapter)) = app_chapter_parts(&onclick) {
 				let key = format!("{}_{}", section, chapter);
 				let chapter_url = Url::chapter(manga_id.to_string(), key.clone()).to_string();
@@ -301,6 +314,10 @@ impl ChapterPage for Document {
 			} else {
 				"默认".to_string()
 			};
+
+			if key.is_empty() {
+				continue;
+			}
 
 			chapters.push(aidoku::Chapter {
 				key,

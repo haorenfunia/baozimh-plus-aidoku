@@ -136,7 +136,8 @@ impl ImageRequestProvider for Baozimanhua {
 
 impl DeepLinkHandler for Baozimanhua {
 	fn handle_deep_link(&self, url: String) -> Result<Option<DeepLinkResult>> {
-		let url = url.trim_start_matches(BASE_URL);
+		let canonical_url = net::absolute_url(&url);
+		let url = canonical_url.trim_start_matches(BASE_URL);
 		let mut splits = url.split('/').skip(1);
 		let deep_link_result = match splits.next() {
 			Some("comic") => {

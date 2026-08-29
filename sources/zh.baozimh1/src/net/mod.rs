@@ -10,6 +10,24 @@ use core::fmt::{Display, Formatter, Result as FmtResult};
 
 pub const APP_BASE_URL: &str = "https://appcn.baozimh.com";
 
+/// Normalize old/alternate Baozi domains and safely join relative links.
+pub fn absolute_url(raw: &str) -> String {
+	let value = raw.trim();
+	let mut url = if value.starts_with("https://") || value.starts_with("http://") {
+		value.to_string()
+	} else if value.starts_with("//") {
+		format!("https:{}", value)
+	} else if value.starts_with('/') {
+		format!("{}{}", BASE_URL, value)
+	} else {
+		format!("{}/{}", BASE_URL, value)
+	};
+	for host in ["www.baozimanhua.com", "baozimanhua.com", "cn.baozimanhua.com"] {
+		url = url.replace(host, "www.baozimh.com");
+	}
+	url
+}
+
 pub fn chapter_path(chapter_id: &str) -> String {
 	let chapter_id = chapter_id.split('|').next().unwrap_or(chapter_id);
 	if chapter_id.contains('_') {
