@@ -251,6 +251,15 @@ fn chapter_key(href: &str) -> String {
 	}
 }
 
+fn comic_id_from_href(href: &str) -> Option<String> {
+	href
+		.split("comic_id=")
+		.nth(1)
+		.and_then(|v| v.split('&').next())
+		.filter(|v| !v.is_empty())
+		.map(|v| v.to_string())
+}
+
 impl ChapterPage for Document {
 	fn chapters(&self, manga_id: &str) -> Result<Vec<aidoku::Chapter>> {
 		let full_list_title = self.select(".section-title").and_then(|items| {
@@ -286,15 +295,16 @@ impl ChapterPage for Document {
 				.unwrap_or_default();
 			let (key, chapter_url) = if !url.is_empty() {
 				let key = chapter_key(&url);
+				let comic_id = comic_id_from_href(&url).unwrap_or_else(|| manga_id.to_string());
 				let chapter_url = if key.is_empty() {
 					String::new()
 				} else {
-					Url::chapter(manga_id.to_string(), key.clone()).to_string()
+					Url::chapter(comic_id, key.clone()).to_string()
 				};
 				(key, chapter_url)
-			} else if let Some((_slug, section, chapter)) = app_chapter_parts(&onclick) {
+			} else if let Some((slug, section, chapter)) = app_chapter_parts(&onclick) {
 				let key = format!("{}_{}", section, chapter);
-				let chapter_url = Url::chapter(manga_id.to_string(), key.clone()).to_string();
+				let chapter_url = Url::chapter(slug, key.clone()).to_string();
 				(key, chapter_url)
 			} else {
 				(String::new(), String::new())

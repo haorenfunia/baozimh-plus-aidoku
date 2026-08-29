@@ -6,6 +6,7 @@ mod net;
 
 use aidoku::{
 	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, Manga, MangaPageResult, Page,
+	PageContent,
 	Result, Source,
 	alloc::{String, Vec, string::ToString as _},
 	imports::html::Document,
@@ -14,7 +15,7 @@ use aidoku::{
 };
 use html::{ChapterPage as _, MangaPage as _, PageList as _};
 use json::ApiResponse;
-use net::Url;
+use net::{BYPASS_HOSTS, Url};
 
 pub const BASE_URL: &str = "https://www.twmanga.com";
 
@@ -68,9 +69,33 @@ impl Source for Baozimanhua {
 	}
 
 	fn get_page_list(&self, manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
+		let is_latest = chapter.key.contains("|latest");
 		let chapter_key = chapter.key.split('|').next().unwrap_or(&chapter.key).to_string();
-		let document = Url::chapter(manga.key, chapter_key).request()?.html()?;
-		document.pages()
+		let public_url = chapter
+			.url
+			.clone()
+			.unwrap_or_else(|| Url::chapter(manga.key, chapter_key).to_string());
+
+		if is_latest {
+			for host in BYPASS_HOSTS {
+				if let Ok(document) = net::latest_chapter_request(&public_url, host)?.html()
+					&& let Ok(pages) = document.pages()
+					&& pages.iter().any(|page| match &page.content {
+						PageContent::Url(url, _) => url.contains("baozicdn.com"),
+						_ => false,
+					})
+				{
+					return Ok(pages);
+				}
+			}
+		}
+
+		Request::get(public_url)?
+			.header("Origin", BASE_URL)
+			.header("Referer", BASE_URL)
+			.header("Accept-Language", "zh-CN,zh;q=0.9")
+			.html()?
+			.pages()
 	}
 }
 
