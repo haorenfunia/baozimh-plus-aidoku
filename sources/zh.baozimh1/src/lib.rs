@@ -7,7 +7,7 @@ mod net;
 use aidoku::{
 	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, Manga, MangaPageResult, Page,
 	Result, Source,
-	alloc::{String, Vec},
+	alloc::{String, Vec, string::ToString as _},
 	imports::html::Document,
 	imports::net::Request,
 	prelude::*,
@@ -118,9 +118,9 @@ fn latest_chapter_document(manga_id: &str, chapter_key: &str) -> Result<Document
 		}
 	}
 
-	Url::chapter(manga_id.to_string(), chapter_key.to_string())
+	Ok(Url::chapter(manga_id.to_string(), chapter_key.to_string())
 		.request()?
-		.html()
+		.html()?)
 }
 
 impl ImageRequestProvider for Baozimanhua {
