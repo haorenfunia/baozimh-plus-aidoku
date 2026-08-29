@@ -52,14 +52,16 @@ impl Source for Baozimanhua {
 		needs_details: bool,
 		needs_chapters: bool,
 	) -> Result<Manga> {
-		if needs_details {
+		// Details and chapters come from the same page. Fetching it twice made
+		// opening a manga needlessly slow and increased the chance of timeouts.
+		if needs_details || needs_chapters {
 			let manga_page = Url::manga(manga.key.clone()).request()?.html()?;
-			manga_page.update_details(&mut manga)?;
-		}
-
-		if needs_chapters {
-			let chapter_page = Url::manga(manga.key.clone()).request()?.html()?;
-			manga.chapters = Some(chapter_page.chapters(&manga.key)?);
+			if needs_details {
+				manga_page.update_details(&mut manga)?;
+			}
+			if needs_chapters {
+				manga.chapters = Some(manga_page.chapters(&manga.key)?);
+			}
 		}
 
 		Ok(manga)
