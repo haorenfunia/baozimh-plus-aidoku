@@ -366,22 +366,27 @@ impl PageList for Document {
 			".comic-contain img, .comic-article img, .chapter-img img, .comic-page img, img.comic-contain__item",
 		)?;
 
-		let pages = items
-			.filter_map(|item| {
-				let url = item
-					.attr("data-src")
-					.or_else(|| item.attr("src"))
-					.unwrap_or_default();
-				if url.is_empty() {
-					None
-				} else if !url.contains("/scomic/") && !url.contains("comic") {
-					None
-				} else {
-					Some(Page {
-						content: aidoku::PageContent::url(url),
-						..Default::default()
-					})
-				}
+		let mut urls: Vec<String> = Vec::new();
+		for item in items {
+			let url = item
+				.attr("data-src")
+				.or_else(|| item.attr("src"))
+				.unwrap_or_default();
+			if url.is_empty() {
+				continue;
+			} else if !url.contains("/scomic/") && !url.contains("comic") {
+				continue;
+			}
+			if !urls.iter().any(|existing| existing == url) {
+				urls.push(url.to_string());
+			}
+		}
+
+		let pages = urls
+			.into_iter()
+			.map(|url| Page {
+				content: aidoku::PageContent::url(url),
+				..Default::default()
 			})
 			.collect();
 
