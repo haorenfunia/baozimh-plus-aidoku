@@ -244,7 +244,7 @@ fn chapter_key(href: &str) -> String {
 }
 
 impl ChapterPage for Document {
-	fn chapters(&self, _manga_id: &str) -> Result<Vec<aidoku::Chapter>> {
+	fn chapters(&self, manga_id: &str) -> Result<Vec<aidoku::Chapter>> {
 		let full_list_title = self.select(".section-title").and_then(|items| {
 			items
 				.filter_map(|el| el.text().map(|t| (el, t)))
