@@ -352,12 +352,19 @@ pub trait PageList {
 
 impl PageList for Document {
 	fn pages(&self) -> Result<Vec<Page>> {
-		let items = self.try_select("img.comic-contain__item")?;
+		let items = self.try_select(
+			".comic-contain img, .comic-article img, .chapter-img img, .comic-page img, img.comic-contain__item",
+		)?;
 
 		let pages = items
 			.filter_map(|item| {
-				let url = item.attr("data-src").unwrap_or_default();
+				let url = item
+					.attr("data-src")
+					.or_else(|| item.attr("src"))
+					.unwrap_or_default();
 				if url.is_empty() {
+					None
+				} else if !url.contains("/scomic/") && !url.contains("comic") {
 					None
 				} else {
 					Some(Page {
