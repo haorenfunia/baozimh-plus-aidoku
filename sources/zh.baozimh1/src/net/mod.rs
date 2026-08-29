@@ -222,8 +222,8 @@ impl Display for Url {
 			} => {
 				write!(
 					f,
-					"{}/baozimhapp/comic/chapter/{}/{}.html",
-					APP_BASE_URL, manga_id, chapter_path(chapter_id)
+					"{}/comic/chapter/{}/{}.html",
+					BASE_URL, manga_id, chapter_path(chapter_id)
 				)
 			}
 		}

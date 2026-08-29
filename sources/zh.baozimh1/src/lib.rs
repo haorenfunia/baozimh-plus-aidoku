@@ -68,22 +68,10 @@ impl Source for Baozimanhua {
 	}
 
 	fn get_page_list(&self, manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
-		let is_latest = chapter.key.split('|').any(|part| part == LATEST_CHAPTER_MARK);
 		let chapter_key = chapter.key.split('|').next().unwrap_or(&chapter.key).to_string();
-		let document = if is_latest {
-			latest_chapter_document(&manga.key, &chapter_key)?
-		} else {
-			Url::chapter(manga.key, chapter_key).request()?.html()?
-		};
+		let document = Url::chapter(manga.key, chapter_key).request()?.html()?;
 		document.pages()
 	}
-}
-
-const LATEST_CHAPTER_MARK: &str = "baozimh_latest";
-fn latest_chapter_document(manga_id: &str, chapter_key: &str) -> Result<Document> {
-	Ok(Url::chapter(manga_id.to_string(), chapter_key.to_string())
-		.request()?
-		.html()?)
 }
 
 impl ImageRequestProvider for Baozimanhua {
