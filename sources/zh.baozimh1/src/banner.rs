@@ -46,8 +46,8 @@ impl Signature<'_> {
 }
 
 pub fn process_image(response: ImageResponse) -> ImageRef {
-	let width = response.image.width().round() as usize;
-	let height = response.image.height().round() as usize;
+	let width = response.image.width() as usize;
+	let height = response.image.height() as usize;
 	if width < NARROW_BANNER_WIDTH || height <= NARROW_BOTTOM_HEIGHT {
 		return response.image;
 	}
@@ -449,7 +449,7 @@ fn scaled_narrow_row(y: usize, height: usize) -> [u8; 3] {
 	for component in 0..3 {
 		let start = NARROW_BANNER_SIGNATURE[first][component] as f32;
 		let end = NARROW_BANNER_SIGNATURE[second][component] as f32;
-		result[component] = (start + (end - start) * weight).round() as u8;
+		result[component] = (start + (end - start) * weight + 0.5) as u8;
 	}
 	result
 }
