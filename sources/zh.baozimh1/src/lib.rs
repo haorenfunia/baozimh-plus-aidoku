@@ -1,13 +1,14 @@
 #![no_std]
 
+mod banner;
+mod banner_signatures;
 mod html;
 mod json;
 mod net;
 
 use aidoku::{
-	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, Manga, MangaPageResult, Page,
-	PageContent,
-	Result, Source,
+	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, ImageResponse, Manga,
+	MangaPageResult, Page, PageContent, PageImageProcessor, Result, Source,
 	alloc::{String, Vec, string::ToString as _},
 	imports::html::Document,
 	imports::net::Request,
@@ -112,6 +113,16 @@ impl ImageRequestProvider for Baozimanhua {
 	}
 }
 
+impl PageImageProcessor for Baozimanhua {
+	fn process_page_image(
+		&self,
+		response: ImageResponse,
+		_context: Option<aidoku::PageContext>,
+	) -> Result<aidoku::imports::canvas::ImageRef> {
+		Ok(banner::process_image(response))
+	}
+}
+
 impl DeepLinkHandler for Baozimanhua {
 	fn handle_deep_link(&self, url: String) -> Result<Option<DeepLinkResult>> {
 		let canonical_url = net::absolute_url(&url);
@@ -141,4 +152,9 @@ impl DeepLinkHandler for Baozimanhua {
 	}
 }
 
-register_source!(Baozimanhua, ImageRequestProvider, DeepLinkHandler);
+register_source!(
+	Baozimanhua,
+	ImageRequestProvider,
+	PageImageProcessor,
+	DeepLinkHandler
+);
