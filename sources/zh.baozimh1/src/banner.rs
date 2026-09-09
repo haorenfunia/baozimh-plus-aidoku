@@ -93,8 +93,10 @@ fn decode_row_samples(
 	let narrow_x = (png.width - narrow_width) / 2;
 	let wide_x = (png.width >= BANNER_WIDTH).then_some((png.width - BANNER_WIDTH) / 2);
 	let row_size = png.width.checked_mul(png.channels)?.checked_add(1)?;
-	let mut scanline = vec![0u8; row_size];
-	let mut previous = vec![0u8; row_size - 1];
+	let mut scanline = Vec::new();
+	scanline.resize(row_size, 0u8);
+	let mut previous = Vec::new();
+	previous.resize(row_size - 1, 0u8);
 	let mut filled = 0usize;
 	let mut rows = Vec::with_capacity(png.height);
 	let mut inflater = InflateState::new_boxed(DataFormat::Zlib);
