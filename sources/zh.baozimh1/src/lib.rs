@@ -16,7 +16,9 @@ use aidoku::{
 };
 use html::{ChapterPage as _, MangaPage as _, PageList as _};
 use json::ApiResponse;
-use net::{BYPASS_HOSTS, Url};
+use net::{
+	APP_ID, APP_USER_AGENT, APP_VERSION, BYPASS_HOSTS, DEVICE_CODE, DEVICE_ID, Url,
+};
 
 pub const BASE_URL: &str = "https://www.twmanga.com";
 
@@ -109,7 +111,13 @@ impl ImageRequestProvider for Baozimanhua {
 		let url = url
 			.replace(".baozicdn.com", ".baozimh.com")
 			.replace(".bzcdn.net", ".baozimh.com");
-		Ok(Request::get(url)?.header("Referer", BASE_URL))
+		Ok(Request::get(url)?
+			.header("Referer", "https://app.baozimh.com/")
+			.header("User-Agent", APP_USER_AGENT)
+			.header("app-id", APP_ID)
+			.header("app-version", APP_VERSION)
+			.header("device-code", DEVICE_CODE)
+			.header("device-id", DEVICE_ID))
 	}
 }
 

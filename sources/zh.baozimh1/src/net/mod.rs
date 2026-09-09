@@ -9,6 +9,11 @@ use aidoku::{
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
 pub const APP_BASE_URL: &str = "https://www.twmanga.com";
+pub const APP_USER_AGENT: &str = "baozimh_android/1.0.31/gb/adset";
+pub const APP_ID: &str = "cn.sts.xiaoyun.ordermeals";
+pub const APP_VERSION: &str = "1.0.31";
+pub const DEVICE_CODE: &str = "2c712c6ba4e95a9f4157f94e1794a86c";
+pub const DEVICE_ID: &str = "BE2A.250530.026.F3";
 pub const BYPASS_HOSTS: &[&str] = &[
 	"appgb-vdkr.baozimh.com",
 	"appgb1-vdkr.baozimh.com",
@@ -59,11 +64,11 @@ pub fn latest_chapter_request(url: &str, host: &str) -> Result<Request> {
 	Ok(Request::get(app_url)?
 		.header("Origin", BASE_URL)
 		.header("Referer", "https://app.baozimh.com/")
-		.header("User-Agent", "baozimh_android/1.0.31/gb/adset")
-		.header("app-id", "cn.sts.xiaoyun.ordermeals")
-		.header("app-version", "1.0.31")
-		.header("device-code", "2c712c6ba4e95a9f4157f94e1794a86c")
-		.header("device-id", "BE2A.250530.026.F3"))
+		.header("User-Agent", APP_USER_AGENT)
+		.header("app-id", APP_ID)
+		.header("app-version", APP_VERSION)
+		.header("device-code", DEVICE_CODE)
+		.header("device-id", DEVICE_ID))
 }
 
 const GENRE_OPTIONS: &[&str] = &[
