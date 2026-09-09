@@ -32,8 +32,14 @@ jobs:
       - name: Build source packages
         shell: bash
         run: |
+          set -o pipefail
           for src in sources/*; do
-            (cd "$src" && aidoku package)
+            log_file="$(mktemp)"
+            if ! (cd "$src" && aidoku package) 2>&1 | tee "$log_file"; then
+              message="$(tail -n 40 "$log_file" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')"
+              echo "::error title=Aidoku source build failed::$message"
+              exit 1
+            fi
           done
 
       - name: Build source index
