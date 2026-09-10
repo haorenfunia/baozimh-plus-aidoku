@@ -1,4 +1,5 @@
 use aidoku::{
+	ImageResponse,
 	alloc::Vec,
 	imports::canvas::{Canvas, ImageRef, Rect},
 };
@@ -7,120 +8,71 @@ use miniz_oxide::{
 	inflate::stream::{InflateState, inflate},
 };
 
-const ROW_SAMPLES: usize = 32;
-const SPLIT_BAND_RADIUS: usize = 2;
-const MAX_AVG_SPLIT_ERROR: usize = 8;
-const MAX_AVG_IMAGE_ERROR: usize = 12;
+use crate::banner_signatures::{BANNER_SIGNATURE, NARROW_BANNER_SIGNATURE, OLD_BANNER_SIGNATURE};
 
-type RowSamples = [[u8; 3]; ROW_SAMPLES];
+const BANNER_WIDTH: usize = 800;
+const BANNER_HEIGHT: usize = 200;
+const OLD_BANNER_HEIGHT: usize = 282;
+const NARROW_BANNER_WIDTH: usize = 640;
+const NARROW_BANNER_HEIGHT: usize = 186;
+const NARROW_BOTTOM_HEIGHT: usize = 160;
+const SIGNATURE_COLS: usize = 16;
+const MAX_AVG_ERROR_PER_COMPONENT: usize = 6;
 
-pub fn merge_images(primary: ImageRef, alternate: ImageRef) -> ImageRef {
-	let width = primary.width() as usize;
-	let height = primary.height() as usize;
-	if width == 0
-		|| height < 4
-		|| alternate.width() as usize != width
-		|| alternate.height() as usize != height
-	{
-		return primary;
+struct RowSamples {
+	wide: Option<[u8; 3]>,
+	narrow: [u8; 3],
+}
+
+enum Signature<'a> {
+	Fixed(&'a [[u8; 3]]),
+	ScaledNarrow { height: usize, full_height: usize },
+}
+
+impl Signature<'_> {
+	fn height(&self) -> usize {
+		match self {
+			Self::Fixed(rows) => rows.len(),
+			Self::ScaledNarrow { height, .. } => *height,
+		}
 	}
 
-	let Some(primary_rows) = image_row_samples(&primary, width, height) else {
-		return primary;
-	};
-	let Some(alternate_rows) = image_row_samples(&alternate, width, height) else {
-		return primary;
-	};
-	let Some(split) = best_split(&primary_rows, &alternate_rows) else {
-		return primary;
+	fn row(&self, y: usize) -> [u8; 3] {
+		match self {
+			Self::Fixed(rows) => rows[y],
+			Self::ScaledNarrow { full_height, .. } => scaled_narrow_row(y, *full_height),
+		}
+	}
+}
+
+pub fn process_image(response: ImageResponse) -> ImageRef {
+	let width = response.image.width() as usize;
+	let height = response.image.height() as usize;
+	if width < NARROW_BANNER_WIDTH || height <= NARROW_BOTTOM_HEIGHT {
+		return response.image;
+	}
+
+	let raw_data = response.image.data();
+	// Network responses are usually stored as their original JPEG/WebP bytes.
+	// Round-trip through the host image API to get a predictable PNG stream.
+	let data = ImageRef::new(&raw_data).data();
+	let Some(rows) = decode_row_samples(&data, width, height) else {
+		return response.image;
 	};
 
-	let mut canvas = Canvas::new(width as f32, height as f32);
+	let (top, bottom) = crop_amounts(&rows, width, height);
+	let content_height = height.saturating_sub(top + bottom);
+	if (top == 0 && bottom == 0) || content_height == 0 {
+		return response.image;
+	}
+
+	let mut canvas = Canvas::new(width as f32, content_height as f32);
 	canvas.copy_image(
-		&primary,
-		Rect::new(0.0, 0.0, width as f32, split as f32),
-		Rect::new(0.0, 0.0, width as f32, split as f32),
-	);
-	canvas.copy_image(
-		&alternate,
-		Rect::new(
-			0.0,
-			split as f32,
-			width as f32,
-			(height - split) as f32,
-		),
-		Rect::new(
-			0.0,
-			split as f32,
-			width as f32,
-			(height - split) as f32,
-		),
+		&response.image,
+		Rect::new(0.0, top as f32, width as f32, content_height as f32),
+		Rect::new(0.0, 0.0, width as f32, content_height as f32),
 	);
 	canvas.get_image()
-}
-
-fn image_row_samples(image: &ImageRef, width: usize, height: usize) -> Option<Vec<RowSamples>> {
-	let raw_data = image.data();
-	// ImageRef data may still contain the original JPEG/WebP response. Re-importing
-	// it makes the host return a predictable PNG stream for row comparison.
-	let png_data = ImageRef::new(&raw_data).data();
-	decode_row_samples(&png_data, width, height)
-}
-
-fn best_split(primary: &[RowSamples], alternate: &[RowSamples]) -> Option<usize> {
-	if primary.len() != alternate.len() || primary.len() < 4 {
-		return None;
-	}
-	if image_error(primary, alternate) > MAX_AVG_IMAGE_ERROR {
-		return None;
-	}
-
-	let height = primary.len();
-	let start = (height / 4).max(SPLIT_BAND_RADIUS);
-	let end = (height * 3 / 4).min(height - SPLIT_BAND_RADIUS - 1);
-	if start > end {
-		return None;
-	}
-
-	let mut best = (usize::MAX, start);
-	for y in start..=end {
-		let error = band_error(primary, alternate, y);
-		if error < best.0 {
-			best = (error, y);
-		}
-	}
-
-	(best.0 <= MAX_AVG_SPLIT_ERROR).then_some(best.1)
-}
-
-fn image_error(primary: &[RowSamples], alternate: &[RowSamples]) -> usize {
-	let mut difference = 0usize;
-	let mut components = 0usize;
-	for row in 0..primary.len() {
-		for sample in 0..ROW_SAMPLES {
-			for component in 0..3 {
-				difference += primary[row][sample][component]
-					.abs_diff(alternate[row][sample][component]) as usize;
-				components += 1;
-			}
-		}
-	}
-	difference / components
-}
-
-fn band_error(primary: &[RowSamples], alternate: &[RowSamples], y: usize) -> usize {
-	let mut difference = 0usize;
-	let mut components = 0usize;
-	for row in (y - SPLIT_BAND_RADIUS)..=(y + SPLIT_BAND_RADIUS) {
-		for sample in 0..ROW_SAMPLES {
-			for component in 0..3 {
-				difference += primary[row][sample][component]
-					.abs_diff(alternate[row][sample][component]) as usize;
-				components += 1;
-			}
-		}
-	}
-	difference / components
 }
 
 fn decode_row_samples(
@@ -133,6 +85,13 @@ fn decode_row_samples(
 		return None;
 	}
 
+	let narrow_width = if png.width < BANNER_WIDTH {
+		png.width
+	} else {
+		NARROW_BANNER_WIDTH
+	};
+	let narrow_x = (png.width - narrow_width) / 2;
+	let wide_x = (png.width >= BANNER_WIDTH).then_some((png.width - BANNER_WIDTH) / 2);
 	let row_size = png.width.checked_mul(png.channels)?.checked_add(1)?;
 	let mut scanline = Vec::new();
 	scanline.resize(row_size, 0u8);
@@ -155,7 +114,9 @@ fn decode_row_samples(
 					&mut scanline,
 					&mut previous,
 					png.channels,
-					png.width,
+					wide_x,
+					narrow_x,
+					narrow_width,
 					&mut rows,
 				)?;
 				filled = 0;
@@ -191,7 +152,9 @@ fn decode_row_samples(
 				&mut scanline,
 				&mut previous,
 				png.channels,
-				png.width,
+				wide_x,
+				narrow_x,
+				narrow_width,
 				&mut rows,
 			)?;
 			filled = 0;
@@ -211,17 +174,17 @@ fn push_scanline(
 	row: &mut [u8],
 	previous: &mut [u8],
 	channels: usize,
-	width: usize,
+	wide_x: Option<usize>,
+	narrow_x: usize,
+	narrow_width: usize,
 	rows: &mut Vec<RowSamples>,
 ) -> Option<()> {
 	unfilter_scanline(row, previous, channels)?;
 	let pixels = &row[1..];
-	let mut samples = [[0u8; 3]; ROW_SAMPLES];
-	for (index, sample) in samples.iter_mut().enumerate() {
-		let x = ((index * 2 + 1) * width / (ROW_SAMPLES * 2)).min(width - 1);
-		*sample = pixel(pixels, channels, x);
-	}
-	rows.push(samples);
+	rows.push(RowSamples {
+		wide: wide_x.map(|x| average_row(pixels, channels, x, BANNER_WIDTH)),
+		narrow: average_row(pixels, channels, narrow_x, narrow_width),
+	});
 	previous.copy_from_slice(pixels);
 	Some(())
 }
@@ -329,6 +292,26 @@ fn paeth(left: u8, above: u8, upper_left: u8) -> u8 {
 	}
 }
 
+fn average_row(data: &[u8], channels: usize, x: usize, width: usize) -> [u8; 3] {
+	let start = width / 5;
+	let span = width * 3 / 5;
+	let mut sums = [0usize; 3];
+
+	for index in 0..SIGNATURE_COLS {
+		let sample_x = x + start + index * span / SIGNATURE_COLS;
+		let color = pixel(data, channels, sample_x);
+		for component in 0..3 {
+			sums[component] += color[component] as usize;
+		}
+	}
+
+	[
+		(sums[0] / SIGNATURE_COLS) as u8,
+		(sums[1] / SIGNATURE_COLS) as u8,
+		(sums[2] / SIGNATURE_COLS) as u8,
+	]
+}
+
 fn pixel(data: &[u8], channels: usize, x: usize) -> [u8; 3] {
 	let offset = x * channels;
 	if channels < 3 {
@@ -336,4 +319,137 @@ fn pixel(data: &[u8], channels: usize, x: usize) -> [u8; 3] {
 	} else {
 		[data[offset], data[offset + 1], data[offset + 2]]
 	}
+}
+
+fn crop_amounts(rows: &[RowSamples], width: usize, height: usize) -> (usize, usize) {
+	let narrow_height = scaled_height(NARROW_BANNER_HEIGHT, width);
+	let narrow_bottom_height = scaled_height(NARROW_BOTTOM_HEIGHT, width);
+	let narrow_top = if width < BANNER_WIDTH {
+		Signature::ScaledNarrow {
+			height: narrow_height,
+			full_height: narrow_height,
+		}
+	} else {
+		Signature::Fixed(&NARROW_BANNER_SIGNATURE)
+	};
+	let narrow_bottom = if width < BANNER_WIDTH {
+		Signature::ScaledNarrow {
+			height: narrow_bottom_height,
+			full_height: narrow_height,
+		}
+	} else {
+		Signature::Fixed(&NARROW_BANNER_SIGNATURE[..NARROW_BOTTOM_HEIGHT])
+	};
+
+	let mut top = 0;
+	while top < height {
+		let consumed = match_top(rows, top, &narrow_top);
+		if consumed == 0 {
+			break;
+		}
+		top += consumed;
+	}
+
+	let mut bottom = 0;
+	while top + bottom < height {
+		let consumed = match_bottom(rows, top, bottom, &narrow_bottom);
+		if consumed == 0 {
+			break;
+		}
+		bottom += consumed;
+	}
+
+	(top, bottom)
+}
+
+fn match_top(rows: &[RowSamples], y: usize, narrow: &Signature<'_>) -> usize {
+	if matches(rows, y, &Signature::Fixed(&BANNER_SIGNATURE), true) {
+		return BANNER_HEIGHT;
+	}
+	if matches(rows, y, &Signature::Fixed(&OLD_BANNER_SIGNATURE), true) {
+		return OLD_BANNER_HEIGHT;
+	}
+	if matches(rows, y, narrow, false) {
+		return narrow.height();
+	}
+	0
+}
+
+fn match_bottom(rows: &[RowSamples], top: usize, bottom: usize, narrow: &Signature<'_>) -> usize {
+	for (signature, wide) in [
+		(Signature::Fixed(&OLD_BANNER_SIGNATURE), true),
+		(Signature::Fixed(&BANNER_SIGNATURE), true),
+	] {
+		let signature_height = signature.height();
+		if let Some(y) = rows.len().checked_sub(bottom + signature_height)
+			&& y >= top
+			&& matches(rows, y, &signature, wide)
+		{
+			return signature_height;
+		}
+	}
+
+	let signature_height = narrow.height();
+	if let Some(y) = rows.len().checked_sub(bottom + signature_height)
+		&& y >= top
+		&& matches(rows, y, narrow, false)
+	{
+		return signature_height;
+	}
+	0
+}
+
+fn matches(rows: &[RowSamples], y: usize, signature: &Signature<'_>, wide: bool) -> bool {
+	let height = signature.height();
+	if y + height > rows.len() {
+		return false;
+	}
+
+	let threshold = height * 3 * MAX_AVG_ERROR_PER_COMPONENT;
+	let mut difference = 0usize;
+	for row in 0..height {
+		let actual = if wide {
+			let Some(actual) = rows[y + row].wide else {
+				return false;
+			};
+			actual
+		} else {
+			rows[y + row].narrow
+		};
+		let expected = signature.row(row);
+		for component in 0..3 {
+			difference += actual[component].abs_diff(expected[component]) as usize;
+		}
+		if difference > threshold {
+			return false;
+		}
+	}
+	true
+}
+
+fn scaled_height(base_height: usize, width: usize) -> usize {
+	if width >= BANNER_WIDTH {
+		base_height
+	} else {
+		(base_height * width + NARROW_BANNER_WIDTH / 2) / NARROW_BANNER_WIDTH
+	}
+}
+
+fn scaled_narrow_row(y: usize, height: usize) -> [u8; 3] {
+	if height == NARROW_BANNER_HEIGHT {
+		return NARROW_BANNER_SIGNATURE[y];
+	}
+
+	let source_position = ((y as f32 + 0.5) * NARROW_BANNER_HEIGHT as f32 / height as f32 - 0.5)
+		.clamp(0.0, (NARROW_BANNER_HEIGHT - 1) as f32);
+	let first = source_position as usize;
+	let second = (first + 1).min(NARROW_BANNER_HEIGHT - 1);
+	let weight = source_position - first as f32;
+	let mut result = [0u8; 3];
+	for component in 0..3 {
+		let start = NARROW_BANNER_SIGNATURE[first][component] as f32;
+		let end = NARROW_BANNER_SIGNATURE[second][component] as f32;
+		result[component] = (start + (end - start) * weight + 0.5) as u8;
+	}
+	result
 }

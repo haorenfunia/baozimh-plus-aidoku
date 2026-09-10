@@ -1,6 +1,7 @@
 #![no_std]
 
 mod banner;
+mod banner_signatures;
 mod html;
 mod json;
 mod net;
@@ -110,18 +111,14 @@ impl ImageRequestProvider for Baozimanhua {
 		let url = url
 			.replace(".baozicdn.com", ".baozimh.com")
 			.replace(".bzcdn.net", ".baozimh.com");
-		image_request(url)
+		Ok(Request::get(url)?
+			.header("Referer", "https://app.baozimh.com/")
+			.header("User-Agent", APP_USER_AGENT)
+			.header("app-id", APP_ID)
+			.header("app-version", APP_VERSION)
+			.header("device-code", DEVICE_CODE)
+			.header("device-id", DEVICE_ID))
 	}
-}
-
-fn image_request(url: String) -> Result<Request> {
-	Ok(Request::get(url)?
-		.header("Referer", "https://app.baozimh.com/")
-		.header("User-Agent", APP_USER_AGENT)
-		.header("app-id", APP_ID)
-		.header("app-version", APP_VERSION)
-		.header("device-code", DEVICE_CODE)
-		.header("device-id", DEVICE_ID))
 }
 
 impl PageImageProcessor for Baozimanhua {
@@ -130,22 +127,7 @@ impl PageImageProcessor for Baozimanhua {
 		response: ImageResponse,
 		_context: Option<aidoku::PageContext>,
 	) -> Result<aidoku::imports::canvas::ImageRef> {
-		let Some(primary_url) = response.request.url.as_deref() else {
-			return Ok(response.image);
-		};
-		if !primary_url.contains("/scomic/") || !primary_url.contains(".baozimh.com") {
-			return Ok(response.image);
-		}
-
-		let alternate_url = primary_url.replace(".baozimh.com", ".baozicdn.com");
-		let Ok(request) = image_request(alternate_url) else {
-			return Ok(response.image);
-		};
-		let Ok(alternate) = request.image() else {
-			return Ok(response.image);
-		};
-
-		Ok(banner::merge_images(response.image, alternate))
+		Ok(banner::process_image(response))
 	}
 }
 
