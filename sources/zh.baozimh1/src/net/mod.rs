@@ -55,7 +55,9 @@ pub fn chapter_path(chapter_id: &str) -> String {
 /// Build the hidden APP-compatible request used for chapters that are gated
 /// behind the site's "watch in app" page. The public/source URL remains
 /// www.twmanga.com; only this fallback request uses an upstream mirror.
-pub fn latest_chapter_request(url: &str, host: &str) -> Result<Request> {
+/// Build the hidden APP-compatible request used to read full chapter pages
+/// from an upstream mirror. The public/source URL remains www.twmanga.com.
+pub fn app_chapter_request(url: &str, host: &str) -> Result<Request> {
 	let path = absolute_url(url)
 		.trim_start_matches(BASE_URL)
 		.trim_start_matches("/baozimhapp")

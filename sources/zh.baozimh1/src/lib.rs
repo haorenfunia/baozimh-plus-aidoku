@@ -72,24 +72,23 @@ impl Source for Baozimanhua {
 	}
 
 	fn get_page_list(&self, manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
-		let is_latest = chapter.key.contains("|latest");
 		let chapter_key = chapter.key.split('|').next().unwrap_or(&chapter.key).to_string();
 		let public_url = chapter
 			.url
 			.clone()
 			.unwrap_or_else(|| Url::chapter(manga.key, chapter_key).to_string());
 
-		if is_latest {
-			for host in BYPASS_HOSTS {
-				if let Ok(document) = net::latest_chapter_request(&public_url, host)?.html()
-					&& let Ok(pages) = document.pages()
-					&& pages.iter().any(|page| match &page.content {
-						PageContent::Url(url, _) => url.contains("baozicdn.com"),
-						_ => false,
-					})
-				{
-					return Ok(pages);
-				}
+		// App-compatible hosts return the full page list; try them before the
+		// public page, which currently caps reader images at 50 for older chapters.
+		for host in BYPASS_HOSTS {
+			if let Ok(document) = net::app_chapter_request(&public_url, host)?.html()
+				&& let Ok(pages) = document.pages()
+				&& pages.iter().any(|page| match &page.content {
+					PageContent::Url(url, _) => url.contains("baozicdn.com"),
+					_ => false,
+				})
+			{
+				return Ok(pages);
 			}
 		}
 
@@ -137,23 +136,21 @@ impl DeepLinkHandler for Baozimanhua {
 		let url = canonical_url.trim_start_matches(BASE_URL);
 		let mut splits = url.split('/').skip(1);
 		let deep_link_result = match splits.next() {
-			Some("comic") => {
-		match splits.next() {
-					Some("chapter") => {
-						match (splits.next(), splits.next()) {
-							(Some(manga_id), Some(chapter_path)) => Some(DeepLinkResult::Chapter {
-								manga_key: manga_id.into(),
-								key: chapter_path.trim_end_matches(".html").into(),
-							}),
-							_ => None,
-						}
+			Some("comic") => match splits.next() {
+				Some("chapter") => {
+					match (splits.next(), splits.next()) {
+						(Some(manga_id), Some(chapter_path)) => Some(DeepLinkResult::Chapter {
+							manga_key: manga_id.into(),
+							key: chapter_path.trim_end_matches(".html").into(),
+						}),
+						_ => None,
 					}
-					Some(manga_id) => Some(DeepLinkResult::Manga {
-						key: manga_id.into(),
-					}),
-					None => None,
 				}
-			}
+				Some(manga_id) => Some(DeepLinkResult::Manga {
+					key: manga_id.into(),
+				}),
+				None => None,
+			},
 			_ => None,
 		};
 		Ok(deep_link_result)
