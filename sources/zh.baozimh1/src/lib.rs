@@ -4,12 +4,14 @@ mod banner;
 mod banner_signatures;
 mod chapter_keys;
 mod html;
+mod home;
 mod json;
 mod net;
 
 use aidoku::{
 	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, ImageResponse, Manga,
-	MangaPageResult, MigrationHandler, Page, PageContent, PageImageProcessor, Result, Source,
+	Home, HomeLayout, Listing, ListingProvider, MangaPageResult, MigrationHandler, Page, PageContent,
+	PageImageProcessor, Result, Source,
 	alloc::{String, Vec, string::ToString as _},
 	imports::html::Document,
 	imports::net::Request,
@@ -102,6 +104,21 @@ impl Source for Baozimanhua {
 	}
 }
 
+impl Home for Baozimanhua {
+	fn get_home(&self) -> Result<HomeLayout> {
+		home::fetch()
+	}
+}
+
+impl ListingProvider for Baozimanhua {
+	fn get_manga_list(&self, listing: Listing, page: i32) -> Result<MangaPageResult> {
+		if listing.id == "all" {
+			return self.get_search_manga_list(None, page, Vec::new());
+		}
+		home::listing(&listing.id, page)
+	}
+}
+
 impl ImageRequestProvider for Baozimanhua {
 	fn get_image_request(
 		&self,
@@ -173,7 +190,9 @@ register_source!(
 	ImageRequestProvider,
 	PageImageProcessor,
 	DeepLinkHandler,
-	MigrationHandler
+	MigrationHandler,
+	Home,
+	ListingProvider
 );
 
 #[cfg(test)]

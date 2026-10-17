@@ -29,8 +29,30 @@ jobs:
             /etc/apt/sources.list.d/google-chrome.list \
             /etc/apt/sources.list.d/google-chrome.sources
           sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y lld
-          cargo install --git https://github.com/Aidoku/aidoku-rs aidoku-cli --locked
+          sudo apt-get install -y lld pkg-config libfreetype6-dev libfontconfig1-dev
+          cargo install --git https://github.com/Aidoku/aidoku-rs aidoku-cli aidoku-test-runner --locked
+
+      - name: Test source regressions
+        shell: bash
+        env:
+          RUSTC_BOOTSTRAP: "1"
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: aidoku-test-runner
+          RUSTFLAGS: "-C panic=abort"
+        run: |
+          for src in sources/*; do
+            (cd "$src" && cargo test --lib --target wasm32-unknown-unknown -Z panic-abort-tests)
+          done
+
+      - name: Check live homepage
+        continue-on-error: true
+        shell: bash
+        env:
+          RUSTC_BOOTSTRAP: "1"
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: aidoku-test-runner
+          RUSTFLAGS: "-C panic=abort"
+        run: |
+          cd sources/zh.baozimh1
+          cargo test --lib --target wasm32-unknown-unknown -Z panic-abort-tests live_home_matches_every_website_card -- --ignored --nocapture
 
       - name: Build source packages
         shell: bash
