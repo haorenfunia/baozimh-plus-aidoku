@@ -2,13 +2,14 @@
 
 mod banner;
 mod banner_signatures;
+mod chapter_keys;
 mod html;
 mod json;
 mod net;
 
 use aidoku::{
 	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, ImageResponse, Manga,
-	MangaPageResult, Page, PageContent, PageImageProcessor, Result, Source,
+	MangaPageResult, MigrationHandler, Page, PageContent, PageImageProcessor, Result, Source,
 	alloc::{String, Vec, string::ToString as _},
 	imports::html::Document,
 	imports::net::Request,
@@ -157,9 +158,56 @@ impl DeepLinkHandler for Baozimanhua {
 	}
 }
 
+impl MigrationHandler for Baozimanhua {
+	fn handle_manga_migration(&self, key: String) -> Result<String> {
+		Ok(key)
+	}
+
+	fn handle_chapter_migration(&self, _manga_key: String, chapter_key: String) -> Result<String> {
+		Ok(chapter_keys::stable_key(&chapter_key).to_string())
+	}
+}
+
 register_source!(
 	Baozimanhua,
 	ImageRequestProvider,
 	PageImageProcessor,
-	DeepLinkHandler
+	DeepLinkHandler,
+	MigrationHandler
 );
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use aidoku_test::aidoku_test;
+
+	#[aidoku_test]
+	fn migration_preserves_manga_and_ordinary_chapter_keys() {
+		let source = Baozimanhua::new();
+		assert_eq!(
+			source.handle_manga_migration("example".into()).unwrap(),
+			"example"
+		);
+		assert_eq!(
+			source
+				.handle_chapter_migration("example".into(), "0_135".into())
+				.unwrap(),
+			"0_135"
+		);
+	}
+
+	#[aidoku_test]
+	fn migration_maps_latest_history_to_the_stable_chapter() {
+		let source = Baozimanhua::new();
+		let migrated = source
+			.handle_chapter_migration("example".into(), "0_136|latest".into())
+			.unwrap();
+		assert_eq!(migrated, "0_136");
+		assert_eq!(
+			source
+				.handle_chapter_migration("example".into(), migrated.clone())
+				.unwrap(),
+			migrated
+		);
+	}
+}

@@ -344,10 +344,6 @@ impl ChapterPage for Document {
 			chapters.reverse();
 		}
 
-		if let Some(first) = chapters.first_mut() {
-			first.key = format!("{}|latest", first.key);
-		}
-
 		if chapters.is_empty() {
 			bail!("No chapters found");
 		}
@@ -404,5 +400,62 @@ impl TrySelect for Element {
 	fn try_select<S: AsRef<str>>(&self, css_query: S) -> Result<ElementList> {
 		self.select(&css_query)
 			.ok_or_else(|| error!("No element found for selector: `{}`", css_query.as_ref()))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use aidoku::imports::html::Html;
+	use aidoku_test::aidoku_test;
+
+	#[aidoku_test]
+	fn latest_chapter_keeps_its_key_after_an_update() {
+		let before = Html::parse(
+			r#"<a class="comics-chapters__item" href="/comic/chapter/example/0_136.html">136</a>"#,
+		)
+		.unwrap()
+		.chapters("example")
+		.unwrap();
+		let after = Html::parse(
+			r#"<a class="comics-chapters__item" href="/comic/chapter/example/0_137.html">137</a>
+			<a class="comics-chapters__item" href="/comic/chapter/example/0_136.html">136</a>"#,
+		)
+		.unwrap()
+		.chapters("example")
+		.unwrap();
+
+		assert_eq!(before[0].key, "0_136");
+		assert_eq!(after[0].key, "0_137");
+		assert_eq!(before[0].key, after[1].key);
+	}
+
+	#[aidoku_test]
+	fn full_directory_uses_stable_keys_after_reversing() {
+		let chapters = Html::parse(
+			r#"<section><h2 class="section-title">章节目录</h2>
+			<div class="pure-g" id="chapters">
+			<a class="comics-chapters__item" href="?comic_id=example&section_slot=0&chapter_slot=136">136</a>
+			<a class="comics-chapters__item" href="?comic_id=example&section_slot=0&chapter_slot=137">137</a>
+			</div></section>"#,
+		)
+		.unwrap()
+		.chapters("example")
+		.unwrap();
+
+		assert_eq!(chapters[0].key, "0_137");
+		assert_eq!(chapters[1].key, "0_136");
+	}
+
+	#[aidoku_test]
+	fn app_chapter_keys_are_stable() {
+		let chapters = Html::parse(
+			r#"<div class="comics-chapters" onclick="send_app_msg('call_page', ['chapter', 'example', 1, 137])">137</div>"#,
+		)
+		.unwrap()
+		.chapters("example")
+		.unwrap();
+
+		assert_eq!(chapters[0].key, "1_137");
 	}
 }
