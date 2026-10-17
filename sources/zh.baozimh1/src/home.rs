@@ -168,7 +168,7 @@ pub fn listing(id: &str, page: i32) -> Result<MangaPageResult> {
 		let document = Request::get(format!("{}/list/new", BASE_URL))?
 			.header("Referer", BASE_URL)
 			.html()?;
-		cards(&document)
+		cards(&Element::from(document))
 	} else {
 		let title = id
 			.strip_prefix("home:")

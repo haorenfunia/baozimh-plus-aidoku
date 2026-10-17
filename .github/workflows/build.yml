@@ -22,6 +22,14 @@ jobs:
           target: wasm32-unknown-unknown
           override: true
 
+      - name: Cache source tools
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/bin/aidoku
+            ~/.cargo/bin/aidoku-test-runner
+          key: aidoku-tools-${{ runner.os }}-v1-${{ hashFiles('sources/*/Cargo.toml') }}
+
       - name: Install build dependencies
         shell: bash
         run: |
@@ -30,7 +38,16 @@ jobs:
             /etc/apt/sources.list.d/google-chrome.sources
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install -y lld pkg-config libfreetype6-dev libfontconfig1-dev
-          cargo install --git https://github.com/Aidoku/aidoku-rs aidoku-cli aidoku-test-runner --locked
+          command -v aidoku || cargo install --git https://github.com/Aidoku/aidoku-rs aidoku-cli --locked
+          command -v aidoku-test-runner || cargo install --git https://github.com/Aidoku/aidoku-rs aidoku-test-runner --locked --debug
+
+      - name: Save source tools
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/bin/aidoku
+            ~/.cargo/bin/aidoku-test-runner
+          key: aidoku-tools-${{ runner.os }}-v1-${{ hashFiles('sources/*/Cargo.toml') }}
 
       - name: Test source regressions
         shell: bash
