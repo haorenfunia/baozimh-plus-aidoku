@@ -1,4 +1,4 @@
-use crate::{BASE_URL, net::Url};
+use crate::{BASE_URL, covers, net::Url, text};
 use aidoku::{
 	Manga, MangaPageResult, MangaStatus, Page, Result, Viewer,
 	alloc::{String, Vec, string::ToString as _, vec},
@@ -56,11 +56,8 @@ impl MangaPage for Document {
 					.and_then(|img| img.attr("src"))
 			});
 
-		// Remove query params from cover if exists
-		if let Some(ref cover) = manga.cover
-			&& let Some(pos) = cover.rfind('?')
-		{
-			manga.cover = Some(cover[..pos].to_string());
+		if let Some(cover) = &mut manga.cover {
+			*cover = covers::url(cover);
 		}
 
 		manga.title = self
@@ -153,14 +150,7 @@ impl MangaPage for Document {
 			let cover = item
 				.select_first("amp-img[noloading]")
 				.and_then(|img| img.attr("src"))
-				.map(|src| {
-					// Remove query params
-					if let Some(pos) = src.rfind('?') {
-						src[..pos].to_string()
-					} else {
-						src
-					}
-				});
+				.map(|src| covers::url(&src));
 
 			let title = item
 				.select_first("h3")
@@ -191,7 +181,7 @@ impl MangaPage for Document {
 				})
 				.unwrap_or_default();
 
-			entries.push(Manga {
+			let mut manga = Manga {
 				key,
 				cover,
 				title,
@@ -199,7 +189,9 @@ impl MangaPage for Document {
 				url: Some(format!("{}{}", BASE_URL, url)),
 				tags: Some(tags),
 				..Default::default()
-			});
+			};
+			text::manga(&mut manga);
+			entries.push(manga);
 		}
 
 		Ok(MangaPageResult {
@@ -310,7 +302,7 @@ impl ChapterPage for Document {
 				(String::new(), String::new())
 			};
 
-			let title = item.text().unwrap_or_default();
+			let title = text::simplified(&item.text().unwrap_or_default());
 
 			let chapter_or_volume = extract_chapter_number(&title).unwrap_or(index);
 			let (ch, vo) = if title.trim().ends_with('卷') {
@@ -457,5 +449,37 @@ mod tests {
 		.unwrap();
 
 		assert_eq!(chapters[0].key, "1_137");
+	}
+
+	#[aidoku_test]
+	fn chapter_titles_convert_without_changing_keys_urls_or_numbers() {
+		let chapters = Html::parse(
+			r#"<a class="comics-chapters__item" href="/comic/chapter/example/0_136.html">第136話 星劍與乾坤</a>"#,
+		)
+		.unwrap()
+		.chapters("example")
+		.unwrap();
+		assert_eq!(chapters[0].key, "0_136");
+		assert_eq!(chapters[0].title.as_deref(), Some("第136话 星剑与乾坤"));
+		assert_eq!(chapters[0].chapter_number, Some(136.0));
+		assert_eq!(
+			chapters[0].url.as_deref(),
+			Some("https://www.twmanga.com/comic/chapter/example/0_136.html")
+		);
+	}
+
+	#[aidoku_test]
+	fn search_results_convert_text_and_use_original_covers() {
+		let results = Html::parse(include_str!("../../tests/fixtures/homepage.html"))
+			.unwrap()
+			.manga_page_result()
+			.unwrap();
+		let manga = &results.entries[0];
+		assert_eq!(manga.key, "example");
+		assert_eq!(manga.title, "测试 & 漫画");
+		assert_eq!(
+			manga.cover.as_deref(),
+			Some("https://static-tw.baozimh.com/cover/example.jpg")
+		);
 	}
 }

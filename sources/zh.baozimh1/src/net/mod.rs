@@ -194,7 +194,9 @@ impl Url {
 					"genre" => {
 						if let Some(index) = GENRE_OPTIONS
 							.iter()
-							.position(|&option| option == value.as_str())
+							.position(|&option| {
+								option == value.as_str() || crate::text::simplified(option) == *value
+							})
 							&& let Some(id) = GENRE_IDS.get(index)
 						{
 							genre = id.to_string();
@@ -259,6 +261,32 @@ impl Display for Url {
 					BASE_URL, manga_id, chapter_path(chapter_id)
 				)
 			}
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use aidoku::alloc::vec;
+	use aidoku_test::aidoku_test;
+
+	#[aidoku_test]
+	fn simplified_and_traditional_genres_use_the_same_api_id() {
+		for value in ["热血", "熱血"] {
+			let url = Url::from_query_or_filters(
+				None,
+				1,
+				&vec![FilterValue::Select {
+					id: "genre".into(),
+					value: value.into(),
+				}],
+			)
+			.unwrap();
+			let Url::Filter { genre, .. } = url else {
+				panic!()
+			};
+			assert_eq!(genre, "rexie");
 		}
 	}
 }

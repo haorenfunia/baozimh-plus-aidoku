@@ -1,4 +1,4 @@
-use crate::BASE_URL;
+use crate::{BASE_URL, covers, text};
 use aidoku::{
 	Manga, MangaPageResult,
 	alloc::{String, Vec, string::ToString as _, vec},
@@ -30,10 +30,10 @@ impl From<ApiResponse> for MangaPageResult {
 			.into_iter()
 			.map(|item| {
 				let key = item.comic_id.clone();
-				let cover = Some(format!(
+				let cover = Some(covers::url(&format!(
 					"https://static-tw.baozimh.com/cover/{}",
 					item.topic_img
-				));
+				)));
 				let title = item.name;
 
 				// Deduplicate authors
@@ -57,7 +57,7 @@ impl From<ApiResponse> for MangaPageResult {
 					categories.insert(0, region);
 				}
 
-				Manga {
+				let mut manga = Manga {
 					key: key.clone(),
 					cover,
 					title,
@@ -65,7 +65,9 @@ impl From<ApiResponse> for MangaPageResult {
 					url: Some(format!("{}/comic/{}", BASE_URL, key)),
 					tags: Some(categories),
 					..Default::default()
-				}
+				};
+				text::manga(&mut manga);
+				manga
 			})
 			.collect();
 
@@ -75,5 +77,33 @@ impl From<ApiResponse> for MangaPageResult {
 			entries,
 			has_next_page,
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use aidoku_test::aidoku_test;
+
+	#[aidoku_test]
+	fn category_results_convert_display_text_and_preserve_identifiers() {
+		let response: ApiResponse = serde_json::from_str(
+			r#"{"items":[{"comic_id":"example-id","topic_img":"example.jpg?w=285","name":"星劍大師","author":"畫師","type_names":["熱血","rexie"],"region_name":"國漫"}],"next":null}"#,
+		)
+		.unwrap();
+		let results: MangaPageResult = response.into();
+		let manga = &results.entries[0];
+		assert_eq!(manga.key, "example-id");
+		assert_eq!(manga.title, "星剑大师");
+		assert_eq!(manga.authors.as_ref().unwrap(), &vec!["画师".to_string()]);
+		assert_eq!(
+			manga.tags.as_ref().unwrap(),
+			&vec!["国漫".to_string(), "热血".to_string()]
+		);
+		assert_eq!(
+			manga.cover.as_deref(),
+			Some("https://static-tw.baozimh.com/cover/example.jpg")
+		);
+		assert!(!results.has_next_page);
 	}
 }

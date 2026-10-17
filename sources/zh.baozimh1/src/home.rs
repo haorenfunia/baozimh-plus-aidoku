@@ -1,4 +1,4 @@
-use crate::{BASE_URL, net::absolute_url};
+use crate::{BASE_URL, covers, net::absolute_url, text::simplified};
 use aidoku::{
 	HomeComponent, HomeComponentValue, HomeLayout, Link, LinkValue, Listing, Manga,
 	MangaPageResult, Result,
@@ -11,17 +11,7 @@ use aidoku::{
 };
 
 fn text(value: String) -> String {
-	value.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn cover_url(value: String) -> String {
-	if value.starts_with("//") {
-		format!("https:{}", value)
-	} else if value.starts_with('/') {
-		format!("{}{}", BASE_URL, value)
-	} else {
-		value
-	}
+	simplified(&value.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
 pub fn cards(container: &Element) -> Vec<Link> {
@@ -59,7 +49,7 @@ pub fn cards(container: &Element) -> Vec<Link> {
 						.or_else(|| el.attr("src"))
 				})
 				.filter(|s| !s.is_empty())
-				.map(cover_url);
+				.map(|url| covers::url(&url));
 			let subtitle = card
 				.select_first("small")
 				.and_then(|el| el.text())
@@ -109,20 +99,21 @@ pub fn parse(document: &Document) -> Result<HomeLayout> {
 		.into_iter()
 		.flatten()
 	{
-		let Some(title) = section
+		let Some(original_title) = section
 			.select_first(".catalog-title")
 			.and_then(|el| el.text())
-			.map(text)
+			.map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "))
 			.filter(|s| !s.is_empty())
 		else {
 			continue;
 		};
+		let title = simplified(&original_title);
 		let entries = cards(&section);
 		if entries.is_empty() {
 			continue;
 		}
 		let listing = Some(Listing {
-			id: format!("home:{}", title),
+			id: format!("home:{}", original_title),
 			name: title.clone(),
 			..Default::default()
 		});
@@ -156,6 +147,23 @@ pub fn fetch() -> Result<HomeLayout> {
 	parse(&document)
 }
 
+fn section_entries(layout: HomeLayout, id: &str) -> Result<Vec<Link>> {
+	let title = simplified(
+		id.strip_prefix("home:")
+			.ok_or_else(|| error!("Unknown listing"))?,
+	);
+	let component = layout
+		.components
+		.into_iter()
+		.find(|component| component.title.as_deref() == Some(title.as_str()))
+		.ok_or_else(|| error!("Homepage section not found: {}", title))?;
+	Ok(match component.value {
+		HomeComponentValue::Scroller { entries, .. }
+		| HomeComponentValue::MangaList { entries, .. } => entries,
+		_ => vec![],
+	})
+}
+
 pub fn listing(id: &str, page: i32) -> Result<MangaPageResult> {
 	// The site's curated homepage and new-arrivals page are finite, not paginated.
 	if page > 1 {
@@ -170,19 +178,7 @@ pub fn listing(id: &str, page: i32) -> Result<MangaPageResult> {
 			.html()?;
 		cards(&Element::from(document))
 	} else {
-		let title = id
-			.strip_prefix("home:")
-			.ok_or_else(|| error!("Unknown listing"))?;
-		let component = fetch()?
-			.components
-			.into_iter()
-			.find(|component| component.title.as_deref() == Some(title))
-			.ok_or_else(|| error!("Homepage section not found: {}", title))?;
-		match component.value {
-			HomeComponentValue::Scroller { entries, .. }
-			| HomeComponentValue::MangaList { entries, .. } => entries,
-			_ => vec![],
-		}
+		section_entries(fetch()?, id)?
 	};
 	Ok(MangaPageResult {
 		entries: entries
@@ -207,30 +203,31 @@ mod tests {
 		let document = Html::parse(include_str!("../tests/fixtures/homepage.html")).unwrap();
 		let layout = parse(&document).unwrap();
 		assert_eq!(layout.components.len(), 3);
-		assert_eq!(layout.components[0].title.as_deref(), Some("熱門漫畫"));
-		assert_eq!(layout.components[1].title.as_deref(), Some("推薦日漫"));
+		assert_eq!(layout.components[0].title.as_deref(), Some("热门漫画"));
+		assert_eq!(layout.components[1].title.as_deref(), Some("推荐日漫"));
 		assert_eq!(layout.components[2].title.as_deref(), Some("最近更新"));
 		let HomeComponentValue::Scroller { entries, listing } = &layout.components[0].value else {
 			panic!("Expected horizontal scroller");
 		};
 		assert_eq!(entries.len(), 2);
 		assert_eq!(listing.as_ref().unwrap().id, "home:熱門漫畫");
-		assert_eq!(entries[0].subtitle.as_deref(), Some("更新至 第136話"));
+		assert_eq!(listing.as_ref().unwrap().name, "热门漫画");
+		assert_eq!(entries[0].subtitle.as_deref(), Some("更新至 第136话"));
 		let Some(LinkValue::Manga(manga)) = &entries[0].value else {
 			panic!()
 		};
 		assert_eq!(manga.key, "example");
-		assert_eq!(manga.title, "測試 & 漫畫");
+		assert_eq!(manga.title, "测试 & 漫画");
 		assert_eq!(
 			manga.url.as_deref(),
 			Some("https://www.twmanga.com/comic/example")
 		);
 		assert_eq!(
 			manga.cover.as_deref(),
-			Some("https://static-tw.baozimh.com/cover/example.jpg?w=285&h=375")
+			Some("https://static-tw.baozimh.com/cover/example.jpg")
 		);
 		assert!(manga.authors.is_none());
-		assert_eq!(manga.tags.as_ref().unwrap(), &vec!["熱血".to_string()]);
+		assert_eq!(manga.tags.as_ref().unwrap(), &vec!["热血".to_string()]);
 		let HomeComponentValue::Scroller { entries, .. } = &layout.components[1].value else {
 			panic!()
 		};
@@ -252,7 +249,7 @@ mod tests {
 			panic!()
 		};
 		assert_eq!(*page_size, Some(6));
-		assert_eq!(entries[0].subtitle.as_deref(), Some("更新至 第137話"));
+		assert_eq!(entries[0].subtitle.as_deref(), Some("更新至 第137话"));
 		// The same manga can legitimately appear in more than one website section.
 		let Some(LinkValue::Manga(manga)) = &entries[0].value else {
 			panic!()
@@ -275,6 +272,18 @@ mod tests {
 		.unwrap();
 		assert!(result.entries.is_empty());
 		assert!(!result.has_next_page);
+	}
+
+	#[aidoku_test]
+	fn traditional_listing_ids_still_open_simplified_sections() {
+		let document = Html::parse(include_str!("../tests/fixtures/homepage.html")).unwrap();
+		let layout = parse(&document).unwrap();
+		let original = section_entries(layout.clone(), "home:熱門漫畫").unwrap();
+		let simplified = section_entries(layout.clone(), "home:热门漫画").unwrap();
+		assert_eq!(original, simplified);
+		assert_eq!(original.len(), 2);
+		assert!(section_entries(layout.clone(), "home:不存在").is_err());
+		assert!(section_entries(layout, "unknown").is_err());
 	}
 
 	#[aidoku_test]
@@ -321,6 +330,8 @@ mod tests {
 						.as_ref()
 						.is_some_and(|url| url.starts_with("https://"))
 				);
+				assert!(!manga.cover.as_ref().unwrap().contains('?'));
+				assert_eq!(entry.title, simplified(&entry.title));
 			}
 			total += entries.len();
 			println!("{}: {} entries", title, entries.len());

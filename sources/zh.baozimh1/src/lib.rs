@@ -3,10 +3,12 @@
 mod banner;
 mod banner_signatures;
 mod chapter_keys;
+mod covers;
 mod html;
 mod home;
 mod json;
 mod net;
+mod text;
 
 use aidoku::{
 	Chapter, DeepLinkHandler, DeepLinkResult, ImageRequestProvider, ImageResponse, Manga,
@@ -71,6 +73,7 @@ impl Source for Baozimanhua {
 			}
 		}
 
+		text::manga(&mut manga);
 		Ok(manga)
 	}
 
@@ -128,6 +131,9 @@ impl ImageRequestProvider for Baozimanhua {
 		let url = url
 			.replace(".baozicdn.com", ".baozimh.com")
 			.replace(".bzcdn.net", ".baozimh.com");
+		if covers::is_cover(&url) {
+			return Ok(Request::get(covers::url(&url))?.header("Referer", BASE_URL));
+		}
 		Ok(Request::get(url)?
 			.header("Referer", "https://app.baozimh.com/")
 			.header("User-Agent", APP_USER_AGENT)
@@ -199,6 +205,31 @@ register_source!(
 mod tests {
 	use super::*;
 	use aidoku_test::aidoku_test;
+
+	#[aidoku_test]
+	fn image_requests_fix_cached_cover_urls_without_changing_reader_paths() {
+		let source = Baozimanhua::new();
+		let cover = source
+			.get_image_request(
+				"https://static-tw.baozimh.com/cover/example.jpg?w=285&h=375".into(),
+				None,
+			)
+			.unwrap();
+		assert_eq!(
+			cover.url().map(String::as_str),
+			Some("https://static-tw.baozimh.com/cover/example.jpg")
+		);
+		let page = source
+			.get_image_request(
+				"https://s1.baozicdn.com/scomic/example/0.jpg?token=123".into(),
+				None,
+			)
+			.unwrap();
+		assert_eq!(
+			page.url().map(String::as_str),
+			Some("https://s1.baozimh.com/scomic/example/0.jpg?token=123")
+		);
+	}
 
 	#[aidoku_test]
 	fn migration_preserves_manga_and_ordinary_chapter_keys() {
