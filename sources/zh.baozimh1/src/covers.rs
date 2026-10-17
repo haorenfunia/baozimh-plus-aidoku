@@ -1,7 +1,20 @@
-use aidoku::alloc::{String, string::ToString as _};
+use aidoku::{
+	alloc::{String, string::ToString as _},
+	prelude::*,
+};
 
 pub fn url(raw: &str) -> String {
-	let url = crate::net::absolute_url(raw);
+	let raw = raw.trim();
+	// Do not apply manga-link domain aliases to independent image CDN hosts.
+	let url = if raw.starts_with("https://") || raw.starts_with("http://") {
+		raw.to_string()
+	} else if raw.starts_with("//") {
+		format!("https:{}", raw)
+	} else if raw.starts_with('/') {
+		format!("{}{}", crate::BASE_URL, raw)
+	} else {
+		format!("{}/{}", crate::BASE_URL, raw)
+	};
 	// The CDN's dynamic thumbnail endpoint can stall; use the cacheable original.
 	if is_cover(&url) {
 		url.split(['?', '#']).next().unwrap_or(&url).to_string()
